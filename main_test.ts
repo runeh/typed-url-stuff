@@ -1,4 +1,8 @@
-import { assertEquals } from "@std/assert";
+import {
+  assertArrayIncludes,
+  assertEquals,
+  assertStrictEquals,
+} from "@std/assert";
 import { defineQuerySpec, ExtractParamNames } from "./typed-query.ts";
 
 /**
@@ -105,81 +109,91 @@ type CannotCallWith<
   TArgs extends readonly unknown[]
 > = TArgs extends Parameters<TFunc> ? false : true;
 
-// Deno.test("Type Equality Tests", () => {
-//   const q = defineQuerySpec({
-//     name: String,
-//     age: Number,
-//     role: ["admin", "user", "intern"],
-//   });
-
-//   type TestParamNameEquality = Expect<
-//     Equal<ExtractParamNames<typeof q>, "role" | "age" | "name">
-//   >;
-
-//   //   // Test exact type equality
-//   // type TestStringEquality = Expect<Equal<string, string>>;
-//   // type TestNumberEquality = Expect<Equal<number, number>>;
-//   // type TestNotEqual = Expect<Equal<Equal<string, number>, false>>;
-
-//   assertEquals(1, 1);
-// });
-
 const testSpec = {
   name: String,
   age: Number,
   role: ["admin", "user", "intern"],
-};
+} as const;
 
 const q = defineQuerySpec(testSpec);
 
-Deno.test("urlHelpers.get (value level)", () => {
+Deno.test("q.names", () => {
+  assertStrictEquals(q.names.age, "age");
+  assertStrictEquals(q.names.name, "name");
+  assertStrictEquals(q.names.role, "role");
+
+  // @ts-expect-error: type level test
+  const _t1 = q.names.pow;
+});
+
+Deno.test("q.nameList", () => {
+  assertStrictEquals(q.namesList.length, 3);
+  assertArrayIncludes(q.namesList, ["age", "name", "role"]);
+});
+
+Deno.test("urlHelpers.get basics (value level)", () => {
   const p = new URLSearchParams();
 
-  assertEquals(q.urlHelpers.get(p, "age"), null);
-  assertEquals(q.urlHelpers.get(p, "name"), null);
-  assertEquals(q.urlHelpers.get(p, "role"), null);
+  assertStrictEquals(q.urlHelpers.get(p, "age"), null);
+  assertStrictEquals(q.urlHelpers.get(p, "name"), null);
+  assertStrictEquals(q.urlHelpers.get(p, "role"), null);
 
   p.set("age", "42");
   p.set("name", "Pelle Parafin");
   p.set("role", "intern");
 
-  assertEquals(q.urlHelpers.get(p, "age"), 42);
-  assertEquals(q.urlHelpers.get(p, "name"), "Pelle Parafin");
-  assertEquals(q.urlHelpers.get(p, "role"), "intern");
+  assertStrictEquals(q.urlHelpers.get(p, "age"), 42);
+  assertStrictEquals(q.urlHelpers.get(p, "name"), "Pelle Parafin");
+  assertStrictEquals(q.urlHelpers.get(p, "role"), "intern");
 
   p.set("age", "fourtytwo");
   p.set("name", "321");
   p.set("role", "bossman");
 
-  assertEquals(q.urlHelpers.get(p, "age"), null);
+  assertStrictEquals(q.urlHelpers.get(p, "age"), null);
   // Valid string, so it's allowed.
-  assertEquals(q.urlHelpers.get(p, "name"), "321");
-  assertEquals(q.urlHelpers.get(p, "role"), null);
+  assertStrictEquals(q.urlHelpers.get(p, "name"), "321");
+  assertStrictEquals(q.urlHelpers.get(p, "role"), null);
 });
 
-Deno.test("urlHelpers.get (type level)", () => {
+Deno.test("urlHelpers.get basics (type level)", () => {
   const p = new URLSearchParams();
 
-  // Make sure we couldn't have called it with a query param that does not
-  // exist in the spec.
-  type TT1 = Expect<
-    CannotCallWith<typeof q.urlHelpers.get, [typeof p, "bad-query-param"]>
-  >;
+  // @ts-expect-error: type level test
+  // Should not be allowed
+  q.urlHelpers.get(p, "unknown-param");
 
-  assertEquals(1, 1);
+  assertStrictEquals(1, 1);
 });
 
-// Deno.test("searchParams: get", async (t) => {
+Deno.test("urlHelpers.set basic (value level)", () => {
+  const p = new URLSearchParams();
 
-//   await t.step("gets", async (t) => {
-//     assertEquals(1, 1);
+  q.urlHelpers.set(p, "age", 43);
+  q.urlHelpers.set(p, "name", "Pelle Parafin");
+  q.urlHelpers.set(p, "role", "intern");
 
-//     await t.step("nerstert", () => {
-//       assertEquals(2, 2);
-//     });
-//   });
+  assertStrictEquals(p.get("age"), "43");
+  assertStrictEquals(p.get("name"), "Pelle Parafin");
+  assertStrictEquals(p.get("role"), "intern");
+});
 
-//   await t.step("asdfasdf 2", () => {
-//     assertEquals(1, 1);
-//   });
-// });
+Deno.test("urlHelpers.set basic (type level)", () => {
+  const p = new URLSearchParams();
+
+  // @ts-expect-error: type level test
+  q.urlHelpers.set(p, "name", 32);
+  // @ts-expect-error: type level test
+  q.urlHelpers.set(p, "role", "administrator");
+});
+
+Deno.test("urlHelpers.set doesn't touch unrelated args", () => {
+  const p = new URLSearchParams();
+
+  p.set("testing", "123");
+
+  q.urlHelpers.set(p, "age", 43);
+
+  assertStrictEquals(p.get("age"), "43");
+  assertStrictEquals(p.get("testing"), "123");
+});
